@@ -27,6 +27,9 @@ reactor作用：对于应用层提供，只需要关注读的数据在哪里rbuf
 
 #define ENABLE_HTTP_RESPONSE 1
 
+typedef int (*msg_handler)(char* msg, int length, char *response);
+static msg_handler kvs_handler;
+
 
 // listenfd
 // 回调函数，如果listenfd有可读事件（listenfd触发EPOLLIN事件的时候），执行accept_cb
@@ -121,6 +124,10 @@ struct timeval tv_start;
 
 #define TIME_SUB_MS(tv1, tv2) ((tv1.tv_sec - tv2.tv_sec) * 1000 + (tv1.tv_usec - tv2.tv_usec) / 1000) // 单位：ms
 
+void kvs_request(struct conn_item *item){
+    item->wlen = kvs_handler(item->rbuffer, item->rlen, item->wbuffer);
+}
+
 int set_event(int fd, int event, int flag){
     // 1 add , 0 mod
     if(flag){
@@ -192,8 +199,11 @@ int recv_cb(int fd){ // fd --> EPOLLIN
 #else
     // http_request(&connlist[fd]);
     // http_response(&connlist[fd]);
-    kvstore_request(&connlist[fd]);
-    connlist[fd].wlen = strlen(connlist[fd].wbuffer);
+    // kvstore_request(&connlist[fd]);
+    // connlist[fd].wlen = strlen(connlist[fd].wbuffer);
+
+    kvs_request(&connlist[fd]);
+    
 #endif
 
     // send(fd, buffer, idx, 0); 直接send，和设置事件优缺点是什么？
@@ -245,10 +255,12 @@ int init_server(unsigned short port){
 }
 
 // tcpserver
-int epoll_entry(void){
+int epoll_entry(msg_handler handler){
     int port_count = 20;
     unsigned short port = 2048;
     int i = 0;
+
+    kvs_handler = handler;
 
     epfd = epoll_create(1);
 

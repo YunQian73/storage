@@ -7,6 +7,9 @@
 #include <assert.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #define BUFFER_LENGTH 512
 
@@ -41,10 +44,49 @@ struct conn_item{
     RCALLBACK send_callback;
 };
 
-int epoll_entry(void);
+#define ENABLE_KVSTORE_LOG  0
+
+enum{
+    KVS_CMD_START = 0,
+    KVS_CMD_SET = KVS_CMD_START,
+    KVS_CMD_GET,
+    KVS_CMD_DEL,
+    KVS_CMD_MOD,
+    KVS_CMD_ACOUNT,
+
+    KVS_CMD_RSET,
+    KVS_CMD_RGET,
+    KVS_CMD_RDEL,
+    KVS_CMD_RMOD,
+    KVS_CMD_RCOUNT,
+
+    KVS_CMD_COUNT
+};
+
+typedef struct KvRecoverResult{
+    int cmd_count;      // 命令的个数
+    char **cmds;        // 存放具体的命令
+} KvRecoverResult_t;
+
+// kvstore.c的函数
+// 在重启服务端的时候将文件中的数据读取出来，返回一个KvRecoverResult_t
+KvRecoverResult_t *kvstore_recover_data(const char* file);
+
+// 把读出来的指令重新执行
+void kvstore_execute_recovered_cmds(const char* file);
+
+int kvstore_split_token(char* msg, char** tokens);
+int kvstore_parser_protocol(char **tokens, int count, char *response);
+int kvstore_request(char *msg, int count, char *response);
+void init_kvengine(void);
+void exit_kvengine(void);
+
+typedef int (*msg_handler)(char *msg, int length, char *response);
+
+int epoll_entry(msg_handler handler);
 int ntyco_entry(void);
 
-int kvstore_request(struct conn_item *item);
+int init_ctx(void);
 
 void *kvstore_malloc(size_t size);
 void kvstore_free(void *ptr);
@@ -55,9 +97,9 @@ void kvstore_free(void *ptr);
 
 #define ENABLE_ARRAY_KVENGINE 1
 #define ENABLE_RBTREE_KVENGINE 1
-#define ENABLE_NETWORK_SELECT NETWORK_NTYCO
+#define ENABLE_NETWORK_SELECT NETWORK_EPOLL
 
-#define ENABLE_MEM_POOL 1
+#define ENABLE_MEM_POOL 0
 
 
 #if ENABLE_MEM_POOL

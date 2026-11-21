@@ -1,28 +1,172 @@
 #include "kvstore.h"
 
-#define KVSTORE_MAX_TOKENS 128
+#define KVSTORE_MAX_TOKENS 128  // 单条指令最大可分tokens数量
+#define KVSTORE_MAX_CMDS 100    // 结构体最大存放命令个数
+#define KVSTORE_BUF_SIZE 256    // 相应缓冲区大小
+
 
 const char* commands[] = {
     "SET", "GET", "DEL", "MOD", "ACOUNT",
     "RSET", "RGET", "RDEL", "RMOD", "RCOUNT"
 };
 
-enum{
-    KVS_CMD_START = 0,
-    KVS_CMD_SET = KVS_CMD_START,
-    KVS_CMD_GET,
-    KVS_CMD_DEL,
-    KVS_CMD_MOD,
-    KVS_CMD_ACOUNT,
+#if 0
 
-    KVS_CMD_RSET,
-    KVS_CMD_RGET,
-    KVS_CMD_RDEL,
-    KVS_CMD_RMOD,
-    KVS_CMD_RCOUNT,
+// 从文件中读取数据
+KvRecoverResult_t* kvstore_recover_data(const char* file){
+    // 分配用于存放结果的内存
+    KvRecoverResult_t* result = (KvRecoverResult_t*)malloc(sizeof(KvRecoverResult_t));
+    if(result == NULL){
+        perror("malloc kvrecoverresult failed");
+        return NULL;
+    }
+    result->cmd_count = 0;
+    result->cmds = NULL;
 
-    KVS_CMD_COUNT
-};
+    int file_fd = open(file, O_RDONLY);
+    if(file_fd == -1){
+        perror("open file failed");
+        return NULL;
+    }
+
+    // 计算文件有多少字节
+    off_t file_size = lseek(file_fd, 0, SEEK_END);
+    if(file_size == -1){
+        perror("lseek failed");
+        close(file_fd);
+        return NULL;
+    }
+    // 空文件
+    if(file_size == 0){
+        printf("%s为空文件\n", file);
+        close(file_fd);
+        return result;
+    }
+
+    // 读取文件内容
+    char *file_buf = malloc(file_size + 1);
+    if(!file_buf){
+        perror("malloc file_buf failed");
+        close(file_fd);
+        free(result);
+        return NULL;
+    }
+    memset(file_buf, 0, file_size + 1); // 初始化缓冲区
+
+    // 将偏移量回位
+    lseek(file_fd, 0, SEEK_SET);
+    ssize_t read_len = read(file_fd, file_buf, file_size);
+    if(read_len == -1){
+        perror("read file failed");
+        close(file_fd);
+        free(file_buf);
+        return NULL;
+    }
+    else if(read_len != file_size){
+        fprintf(stderr, "读取文件不完整，预期%zu字节，实际读取%zd字节。", file_size, read_len);
+        close(file_fd);
+        free(file_buf);
+        free(result);
+        return NULL;
+    }
+    close(file_fd); // 读取完成
+
+    result->cmds = (char**)malloc(sizeof(char *) * KVSTORE_MAX_CMDS);
+    if(result->cmds == NULL){
+        perror("malloc cmds failed");
+        free(file_buf);
+        free(result);
+        return NULL;
+    }
+    memset(result->cmds , 0, sizeof(char *) * KVSTORE_MAX_CMDS);
+
+    // 按照 /r/n 分割指令填入数组
+    char *start = file_buf;
+    char *sep = NULL;
+    
+    while(((sep = strstr(start, "\r\n")) != NULL) && (result->cmd_count < KVSTORE_MAX_CMDS)){
+        int cmd_len = sep - start;
+        if(cmd_len > 0){
+            result->cmds[result->cmd_count] = (char*)malloc(cmd_len + 1);
+            if(result->cmds[result->cmd_count] == NULL){
+                perror("malloc cmd[] failed");
+                free(result);
+                free(file_buf);
+                return NULL;
+            }
+            strncpy(result->cmds[result->cmd_count], start, cmd_len);
+            // result->cmds[result->cmd_count] += '\0';
+            result->cmds[result->cmd_count][cmd_len] = '\0';
+            result->cmd_count++;
+        }
+        start = sep + 2; // 跳过\r\n
+    }
+
+    // 处理最后一条无\r\n结尾的指令
+    if (start < file_buf + file_size && result->cmd_count < KVSTORE_MAX_CMDS){
+        int cmd_len = (file_buf + file_size) - start;
+        if (cmd_len > 0){
+            result->cmds[result->cmd_count] = (char *)malloc(cmd_len + 1);
+            if (result->cmds[result->cmd_count] == NULL){
+                perror("malloc last cmd failed");
+                for (int i = 0; i < result->cmd_count; i++)
+                {
+                free(result->cmds[i]);
+                }
+                free(result->cmds);
+                free(file_buf);
+                free(result);
+                return NULL;
+        }
+            strncpy(result->cmds[result->cmd_count], start, cmd_len);
+            result->cmds[result->cmd_count][cmd_len] = '\0';
+            result->cmd_count++;
+        }
+    }
+
+    free(file_buf);
+    return result;
+}
+
+void kvstore_execute_recovered_cmds(const char* file){
+    KvRecoverResult_t *recover_result = kvstore_recover_data(file);
+    if(recover_result == NULL){
+        fprintf(stderr, "recovery command failed or command is empty");
+        return;
+    }
+    printf("共有 %d 条指令", recover_result->cmd_count);
+
+    // 遍历每条指令来执行
+    for(int i = 0; i < recover_result->cmd_count; i++){
+        char *cmd_cur = recover_result->cmds[i];
+        if(cmd_cur == NULL){
+            fprintf(stderr, "instruction %d is empty", i + 1);
+            continue;
+        }
+
+        printf("原始指令为：%s\n", cmd_cur);
+
+        char *tokens[KVSTORE_MAX_TOKENS] = {NULL};
+        char *response[KVSTORE_BUF_SIZE] = {0};
+
+        // memset(tokens, 0, KVSTORE_MAX_TOKENS);
+        // memset(tokens, 0, KVSTORE_BUF_SIZE);
+
+        char* cmd_copy[strlen(cmd_cur) + 1]; // 避免strtok改变原内容
+        strcpy(cmd_copy, cmd_cur);
+
+        int count = kvstore_split_token(cmd_copy, tokens);
+        if(count < 0){
+            fprintf(stderr, "the tokens or cmd for the %d instruction are empty", i + 1);
+            continue;
+        }
+
+        int ret = kvstore_parser_protocol(NULL, tokens, count);
+    }
+
+}
+#endif
+
 
 void *kvstore_malloc(size_t size){
 #if ENABLE_MEM_POOL
@@ -42,6 +186,7 @@ void kvstore_free(void *ptr){
 
 
 int kvstore_split_token(char* msg, char** tokens){
+    // 初始化后tokens[i]为空，但是tokens不应为空
     if(msg == NULL || tokens == NULL) return -1;
 
     int idx = 0;
@@ -55,8 +200,8 @@ int kvstore_split_token(char* msg, char** tokens){
     return idx;
 }
 
-int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
-    if(item == NULL || tokens[0] == NULL || count == 0) return -1;
+int kvstore_parser_protocol(char **tokens, int count, char *response){
+    if(tokens[0] == NULL || response == NULL || count == 0) return -1;
 
     int cmd = KVS_CMD_START;
 
@@ -66,7 +211,10 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
         }
     }
 
-    char* msg = item->wbuffer;
+    // 存放返回的文件描述符
+    int log_file_fd = -1;
+    char cmd_buf[1024] = {0};
+    int length = 0;
     char* key = tokens[1];
     char* value = tokens[2];
 
@@ -75,11 +223,21 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // LOG("set\n");
             int res = kvstore_array_set(key, value);
             if(!res){
-                memset(msg, 0, BUFFER_LENGTH);
-                snprintf(msg, BUFFER_LENGTH, "SUCCESS");
+                length = sprintf(response, "SUCCESS\r\n");
+#if ENABLE_KVSTORE_LOG
+                log_file_fd = open("kvstore_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
+                if(log_file_fd != -1){
+                    snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
+                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
+                    close(log_file_fd);
+                }
+                else{
+                    perror("open file failed (SET)");
+                }
+#endif
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "FATLED");
+                length = sprintf(response, "FATLED\r\n");
             }
             printf("set: %d\n", res);
             break;
@@ -88,10 +246,10 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // LOG("get\n");
             char *val = kvstore_array_get(key);
             if(val){
-                snprintf(msg, BUFFER_LENGTH, "%s", val);
+                length = sprintf(response, "%s\r\n", val);
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXIST");
+                length = sprintf(response, "NO EXIST\r\n");
             }
             printf("get: %s\n", val);
             break;
@@ -100,13 +258,13 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // LOG("del\n");
             int res = kvstore_array_delete(key);
             if(res < 0){ // server
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else if(res == 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "SUCCESS");               
+                length = sprintf(response, "%s", "SUCCESS");               
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXITS");
+                length = sprintf(response, "NO EXITS");
             }
             break;
         }
@@ -114,23 +272,23 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // LOG("mod\n");
             int res = kvstore_array_modify(key, value);  
             if(res < 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else if(res == 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "SUCCESS");               
+                length = sprintf(response, "%s", "SUCCESS");               
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXITS");
+                length = sprintf(response, "NO EXITS");
             }          
             break;
         }
         case KVS_CMD_ACOUNT:{
             int count = kvstore_array_count();  
             if(count < 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "%d", count);               
+                length = sprintf(response, "%d", count);               
             }  
             break;
         }
@@ -138,21 +296,31 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // printf("rset:%s\n", key);
             int res = kvstore_rbtree_set(key, value);
             if(!res){
-                memset(msg, 0, BUFFER_LENGTH);
-                snprintf(msg, BUFFER_LENGTH, "SUCCESS");
+                length = sprintf(response, "SUCCESS");
+#if ENABLE_KVSTORE_LOG
+                log_file_fd = open("kvstore_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
+                if(log_file_fd != -1){
+                    length = sprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
+                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
+                    close(log_file_fd);
+                }
+                else{
+                    perror("open file failed (RSET)");
+                }
+#endif
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "FATLED");
+                length = sprintf(response, "FATLED");
             }
             break;
         }
         case KVS_CMD_RGET:{
             char *val = kvstore_rbtree_get(key);
             if(val){
-                snprintf(msg, BUFFER_LENGTH, "%s", val);
+                length = sprintf(response, "%s", val);
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXIST");
+                length = sprintf(response, "NO EXIST");
             }
             printf("rget: %s\n", val);
             break;
@@ -161,13 +329,13 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // printf("rdel:%s\n", key);
             int res = kvstore_rbtree_delete(key);
             if(res < 0){ // server
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else if(res == 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "SUCCESS");               
+                length = sprintf(response, "%s", "SUCCESS");               
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXITS");
+                length = sprintf(response, "NO EXITS");
             }
             break;
         }
@@ -175,23 +343,23 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
             // printf("rmod:%s\n", key);
             int res = kvstore_rbtree_modify(key, value);  
             if(res < 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else if(res == 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "SUCCESS");               
+                length = sprintf(response, "%s", "SUCCESS");               
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "NO EXITS");
+                length = sprintf(response, "NO EXITS");
             } 
             break;
         }  
         case KVS_CMD_RCOUNT:{
             int count = kvstore_rbtree_count();  
             if(count < 0){
-                snprintf(msg, BUFFER_LENGTH, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR");
             }
             else{
-                snprintf(msg, BUFFER_LENGTH, "%d", count);               
+                length = sprintf(response, "%d", count);               
             }  
             break;
         }                
@@ -201,21 +369,27 @@ int kvstore_parser_protocol(struct conn_item *item, char **tokens, int count){
         }
             
     }
+    return length;
 }
 
-int kvstore_request(struct conn_item *item){
+int kvstore_request(char *msg, int count, char *response){
     // printf("recv:%s\n", item->rbuffer);
+    if(msg == NULL || count < 0 || response == NULL){
+        return -1;
+    }
 
-    char* msg = item->rbuffer;
-    char *tokens[KVSTORE_MAX_TOKENS];
+    char *tokens[KVSTORE_MAX_TOKENS] = {};
 
-    int count = kvstore_split_token(msg, tokens);
+    count = kvstore_split_token(msg, tokens);
+    if(count == -1){
+        return -1;
+    }
 
     // int idx = 0;
     // for(idx = 0; idx < count; idx++){
     //     printf("idx: %s\n", tokens[idx]);
     // }
-    kvstore_parser_protocol(item, tokens, count);
+    return kvstore_parser_protocol(tokens, count, response);
 
     return 0;
 }
@@ -250,6 +424,7 @@ int init_ctx(void){
 }
 
 
+#if 0
 int main(){
 
     init_kvengine();
@@ -263,5 +438,5 @@ int main(){
 
     exit_kvengine();
 }
-
+#endif
 // 1.40
