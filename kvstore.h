@@ -84,7 +84,7 @@ void exit_kvengine(void);
 typedef int (*msg_handler)(char *msg, int length, char *response);
 
 int epoll_entry(msg_handler handler);
-int ntyco_entry(void);
+int ntyco_entry(msg_handler handler);
 
 int init_ctx(void);
 

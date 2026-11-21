@@ -1,47 +1,3 @@
-/*
- *  Author : WangBoJing , email : 1989wangbojing@gmail.com
- * 
- *  Copyright Statement:
- *  --------------------
- *  This software is protected by Copyright and the information contained
- *  herein is confidential. The software may not be copied and the information
- *  contained herein may not be used or disclosed except with the written
- *  permission of Author. (C) 2017
- * 
- *
-
-****       *****                                      *****
-  ***        *                                       **    ***
-  ***        *         *                            *       **
-  * **       *         *                           **        **
-  * **       *         *                          **          *
-  *  **      *        **                          **          *
-  *  **      *       ***                          **
-  *   **     *    ***********    *****    *****  **                   ****
-  *   **     *        **           **      **    **                 **    **
-  *    **    *        **           **      *     **                 *      **
-  *    **    *        **            *      *     **                **      **
-  *     **   *        **            **     *     **                *        **
-  *     **   *        **             *    *      **               **        **
-  *      **  *        **             **   *      **               **        **
-  *      **  *        **             **   *      **               **        **
-  *       ** *        **              *  *       **               **        **
-  *       ** *        **              ** *        **          *   **        **
-  *        ***        **               * *        **          *   **        **
-  *        ***        **     *         **          *         *     **      **
-  *         **        **     *         **          **       *      **      **
-  *         **         **   *          *            **     *        **    **
-*****        *          ****           *              *****           ****
-                                       *
-                                      *
-                                  *****
-                                  ****
-
-
-
- *
- */
- 
 
 #include "nty_coroutine.h"
 #include "kvstore.h"
@@ -51,6 +7,8 @@
 #define MAX_CLIENT_NUM			1000000
 #define TIME_SUB_MS(tv1, tv2)  ((tv1.tv_sec - tv2.tv_sec) * 1000 + (tv1.tv_usec - tv2.tv_usec) / 1000)
 
+typedef int (*msg_handler)(char *msg, int length, char *response);
+static msg_handler kvs_handler;
 
 void server_reader(void *arg) {
 	int fd = *(int *)arg;
@@ -63,33 +21,16 @@ void server_reader(void *arg) {
 	fds.events = POLLIN;
 
 	while (1) {
-#if 0
-		char buf[1024] = {0};
-		ret = recv(fd, buf, 1024, 0);
-		if (ret > 0) {
-			if(fd > MAX_CLIENT_NUM) 
-			printf("read from server: %.*s\n", ret, buf);
 
-			ret = send(fd, buf, strlen(buf), 0);
-			if (ret == -1) {
-				close(fd);
-				break;
-			}
-		} else if (ret == 0) {	
-			close(fd);
-			break;
-		}
-#else
 		struct conn_item item = {0};
 		ret = recv(fd, item.rbuffer, BUFFER_LENGTH, 0);
 		if (ret > 0) {
 			if(fd > MAX_CLIENT_NUM) 
 			printf("read from server: %.*s\n", ret, item.rbuffer);
 
-			kvstore_request(&item);
+			int slength = kvs_handler(item.rbuffer, item.rlen, item.wbuffer);
 
-			item.wlen = strlen(item.wbuffer);
-			ret = send(fd, item.wbuffer, item.wlen, 0);
+			ret = send(fd, item.wbuffer, slength, 0);
 			if (ret == -1) {
 				close(fd);
 				break;
@@ -98,7 +39,6 @@ void server_reader(void *arg) {
 			close(fd);
 			break;
 		}
-#endif
 	}
 }
 
@@ -145,8 +85,10 @@ void server(void *arg) {
 	
 }
 
-int ntyco_entry(void) {
+int ntyco_entry(msg_handler handler) {
 	nty_coroutine *co = NULL;
+
+	kvs_handler = handler;
 
 	int i = 0;
 	unsigned short base_port = 9096;
