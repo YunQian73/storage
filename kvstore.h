@@ -73,7 +73,10 @@ typedef struct KvRecoverResult{
 KvRecoverResult_t *kvstore_recover_data(const char* file);
 
 // 把读出来的指令重新执行
-void kvstore_execute_recovered_cmds(const char* file);
+int kvstore_execute_recovered_cmds(const char* file);
+
+// 释放分配KvRecoverResult的内存
+void kvstore_free_recover_result(KvRecoverResult_t *recover_result);
 
 int kvstore_split_token(char* msg, char** tokens);
 int kvstore_parser_protocol(char **tokens, int count, char *response);

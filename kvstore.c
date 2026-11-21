@@ -10,8 +10,6 @@ const char* commands[] = {
     "RSET", "RGET", "RDEL", "RMOD", "RCOUNT"
 };
 
-#if 0
-
 // 从文件中读取数据
 KvRecoverResult_t* kvstore_recover_data(const char* file){
     // 分配用于存放结果的内存
@@ -128,13 +126,26 @@ KvRecoverResult_t* kvstore_recover_data(const char* file){
     return result;
 }
 
-void kvstore_execute_recovered_cmds(const char* file){
+void kvstore_free_recover_result(KvRecoverResult_t *recover_result){
+    if(recover_result == NULL) return;
+    if(recover_result->cmds == NULL) return;
+
+    for(int i = 0; i < recover_result->cmd_count; i++){
+        if(recover_result->cmds[i] != NULL){
+            free(recover_result->cmds[i]);
+        }
+    }
+    free(recover_result->cmds);
+    free(recover_result);
+}
+
+int kvstore_execute_recovered_cmds(const char* file){
     KvRecoverResult_t *recover_result = kvstore_recover_data(file);
     if(recover_result == NULL){
         fprintf(stderr, "recovery command failed or command is empty");
-        return;
+        return -1;
     }
-    printf("共有 %d 条指令", recover_result->cmd_count);
+    printf("共有 %d 条指令\n", recover_result->cmd_count);
 
     // 遍历每条指令来执行
     for(int i = 0; i < recover_result->cmd_count; i++){
@@ -147,12 +158,12 @@ void kvstore_execute_recovered_cmds(const char* file){
         printf("原始指令为：%s\n", cmd_cur);
 
         char *tokens[KVSTORE_MAX_TOKENS] = {NULL};
-        char *response[KVSTORE_BUF_SIZE] = {0};
+        char response[KVSTORE_BUF_SIZE] = {0};
 
         // memset(tokens, 0, KVSTORE_MAX_TOKENS);
         // memset(tokens, 0, KVSTORE_BUF_SIZE);
 
-        char* cmd_copy[strlen(cmd_cur) + 1]; // 避免strtok改变原内容
+        char cmd_copy[strlen(cmd_cur) + 1]; // 避免strtok改变原内容
         strcpy(cmd_copy, cmd_cur);
 
         int count = kvstore_split_token(cmd_copy, tokens);
@@ -161,11 +172,24 @@ void kvstore_execute_recovered_cmds(const char* file){
             continue;
         }
 
-        int ret = kvstore_parser_protocol(NULL, tokens, count);
+        int ret = kvstore_parser_protocol(tokens, count, response);
+        if(ret > 0){
+            printf("指令执行成功，返回值为：%s\n", response);
+        }
     }
 
+    // 释放内存
+    /*
+    free(recover_result); 
+    错误做法，recover_result里有一个int和char **
+    这样只释放传进去的指针所指向的那一块内存
+    会漏掉里面的命令字符串和指针数组
+    */
+    kvstore_free_recover_result(recover_result);
+
+    printf("所有命令都已释放\n");
+    return 0;
 }
-#endif
 
 
 void *kvstore_malloc(size_t size){
@@ -191,11 +215,11 @@ int kvstore_split_token(char* msg, char** tokens){
 
     int idx = 0;
 
-    char* token = strtok(msg, " ");
+    char* token = strtok(msg, " \r\n");
 
     while(token != NULL){
         tokens[idx++] = token;
-        token = strtok(NULL, " ");
+        token = strtok(NULL, " \r\n");
     }
     return idx;
 }
@@ -300,7 +324,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
 #if ENABLE_KVSTORE_LOG
                 log_file_fd = open("kvstore_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
                 if(log_file_fd != -1){
-                    length = sprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
+                    length = snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
                     write(log_file_fd, cmd_buf, strlen(cmd_buf));
                     close(log_file_fd);
                 }
