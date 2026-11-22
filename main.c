@@ -4,10 +4,14 @@ int main(){
 
     init_kvengine();
 
-    int ret = kvstore_execute_recovered_cmds("kvstore_log.txt");
+#if ENABLE_KVSTORE_LOG
+    int ret = kvstore_execute_recovered_cmds("kvstore_rdb_log.txt");
     if(ret == 0){
         printf("cmd recovery success\n");
     }
+
+    
+#endif
 
 #if(ENABLE_NETWORK_SELECT == NETWORK_EPOLL)
     epoll_entry(kvstore_request);

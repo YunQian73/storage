@@ -56,24 +56,32 @@ char* kvstore_array_get(char *key){
     return NULL;
 }
 
-int kvstore_array_delete(char *key){
-    int i = 0;
-    if(key == NULL) return -1;    
+int kvstore_array_delete(char *key)
+{
+    if (key == NULL)
+        return -1;
 
-    for(i = 0; i < array_idx; i++){
-        if(strcmp(array_table[i].key, key) == 0){
-            kvstore_free(array_table[i].value);
-            array_table[i].value = NULL;
-
+    for (int i = 0; i < array_idx; i++) {
+        if (strcmp(array_table[i].key, key) == 0) {
             kvstore_free(array_table[i].key);
-            array_table[i].key = NULL;
+            kvstore_free(array_table[i].value);
 
+            // 删除最后一个有效元素
             array_idx--;
+
+            // 用最后一个元素填补当前空位
+            if (i != array_idx) {
+                array_table[i] = array_table[array_idx];
+            }
+
+            // 清空原最后一个位置
+            array_table[array_idx].key = NULL;
+            array_table[array_idx].value = NULL;
 
             return 0;
         }
     }
-    return i;
+    return 1; // Key不存在
 }
 
 int kvstore_array_modify(char *key, char *value){

@@ -44,7 +44,7 @@ struct conn_item{
     RCALLBACK send_callback;
 };
 
-#define ENABLE_KVSTORE_LOG  0
+#define ENABLE_KVSTORE_LOG  1
 
 enum{
     KVS_CMD_START = 0,
@@ -63,12 +63,13 @@ enum{
     KVS_CMD_COUNT
 };
 
+// kvstore_persist.c的函数
+
 typedef struct KvRecoverResult{
     int cmd_count;      // 命令的个数
     char **cmds;        // 存放具体的命令
 } KvRecoverResult_t;
 
-// kvstore.c的函数
 // 在重启服务端的时候将文件中的数据读取出来，返回一个KvRecoverResult_t
 KvRecoverResult_t *kvstore_recover_data(const char* file);
 
@@ -78,6 +79,20 @@ int kvstore_execute_recovered_cmds(const char* file);
 // 释放分配KvRecoverResult的内存
 void kvstore_free_recover_result(KvRecoverResult_t *recover_result);
 
+// 当执行DEL时删除日志中的SET信息
+int delete_log_cmd(const char *log_file, const char *cmd_prefix, char *key);
+
+// 执行MOD时修改日志中的SET
+int modify_log_cmd(const char *log_file, const char *cmd_prefix, char *key, char *value);
+
+// 增量持久化的实现
+int kvstore_aof_append(const char *filename, const char *content);
+
+#define KVSTORE_MAX_TOKENS 128  // 单条指令最大可分tokens数量
+#define KVSTORE_MAX_CMDS 100    // 结构体最大存放命令个数
+#define KVSTORE_BUF_SIZE 256    // 相应缓冲区大小
+
+// kvstore.c的函数
 int kvstore_split_token(char* msg, char** tokens);
 int kvstore_parser_protocol(char **tokens, int count, char *response);
 int kvstore_request(char *msg, int count, char *response);
