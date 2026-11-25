@@ -382,7 +382,7 @@ int modify_log_cmd(const char *log_file, const char *cmd_prefix, char *key, char
         strcpy(cmd_copy, curr_cmd);
 
         // 分割指令为token（复用已有函数)
-        int token_count = kvs_split_token(cmd_copy, tokens);
+        int token_count = kvstore_split_token(cmd_copy, tokens);
 
         // 5. 判断是否是目标指令：set前缀 + 3个token + key匹配
         if (token_count == 3 && strcmp(tokens[0], cmd_prefix) == 0 && strcmp(tokens[1], key) == 0)

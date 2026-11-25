@@ -5,7 +5,7 @@ CFLAGS = -I ./NtyCo/core/ -g -O0 -fno-omit-frame-pointer
 LDFLAGS = -L ./NtyCo/
 LDLIBS = -lntyco
 
-SRCS = main.c kvstore.c ntyco_entry.c epoll_entry.c kvstore_array.c kvstore_rbtree.c kvstore_persist.c
+SRCS = main.c kvstore.c ntyco_entry.c epoll_entry.c kvstore_array.c kvstore_rbtree.c kvstore_persist.c kvstore_hash.c kvstore_skiptable.c
 TESTCASE_SRCS = testcase.c
 
 TARGET = kvstore

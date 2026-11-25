@@ -44,7 +44,7 @@ struct conn_item{
     RCALLBACK send_callback;
 };
 
-#define ENABLE_KVSTORE_LOG  1
+#define ENABLE_KVSTORE_LOG  0
 
 enum{
     KVS_CMD_START = 0,
@@ -59,6 +59,18 @@ enum{
     KVS_CMD_RDEL,
     KVS_CMD_RMOD,
     KVS_CMD_RCOUNT,
+
+    KVS_CMD_HSET,
+    KVS_CMD_HGET,
+    KVS_CMD_HDEL,
+    KVS_CMD_HMOD,
+    KVS_CMD_HCOUNT,
+
+    KVS_CMD_SSET, 
+    KVS_CMD_SGET, 
+    KVS_CMD_SDEL,
+    KVS_CMD_SMOD,
+    KVS_CMD_SCOUNT,
 
     KVS_CMD_COUNT
 };
@@ -86,7 +98,7 @@ int delete_log_cmd(const char *log_file, const char *cmd_prefix, char *key);
 int modify_log_cmd(const char *log_file, const char *cmd_prefix, char *key, char *value);
 
 // 增量持久化的实现
-int kvstore_aof_append(const char *filename, const char *content);
+void kvstore_aof_append(const char *filename, const char *content);
 
 #define KVSTORE_MAX_TOKENS 128  // 单条指令最大可分tokens数量
 #define KVSTORE_MAX_CMDS 100    // 结构体最大存放命令个数
@@ -115,6 +127,8 @@ void kvstore_free(void *ptr);
 
 #define ENABLE_ARRAY_KVENGINE 1
 #define ENABLE_RBTREE_KVENGINE 1
+#define ENABLE_HASH_KVENGINE 1
+#define ENABLE_SKIPLIST_KVENGINE 1
 #define ENABLE_NETWORK_SELECT NETWORK_EPOLL
 
 #define ENABLE_MEM_POOL 0
@@ -149,6 +163,15 @@ struct kvs_array_item{
 
 #define KVS_ARRAY_SIZE  1024
 
+typedef struct array_s{
+    struct kvs_array_item *array_table;
+    int array_idx;
+}array_t;
+
+extern array_t Array;
+
+int kvstore_array_create(array_t *arr);
+int kvstore_array_destory(array_t *arr);
 int kvstore_array_set(char *key, char *value);
 char* kvstore_array_get(char *key);
 int kvstore_array_delete(char *key);
@@ -170,6 +193,76 @@ char* kvstore_rbtree_get(char *key);
 int kvstore_rbtree_delete(char *key);
 int kvstore_rbtree_modify(char *key, char *value);
 int kvstore_rbtree_count(void);
+
+#endif
+
+#if ENABLE_HASH_KVENGINE
+
+#define ENABLE_KEY_POINTER	1
+
+
+typedef struct hashnode_s {
+#if ENABLE_KEY_POINTER
+	char *key;
+	char *value;
+#else
+	char key[MAX_KEY_LEN];
+	char value[MAX_VALUE_LEN];
+#endif
+	struct hashnode_s *next;
+	
+} hashnode_t;
+
+
+typedef struct hashtable_s {
+
+	hashnode_t **nodes; //* change **, 
+
+	int max_slots;
+	int count;
+
+} hashtable_t;
+
+typedef struct hashtable_s kvs_hash_t;
+
+extern kvs_hash_t Hash;
+
+int kvstore_hash_create(kvs_hash_t *hash);
+void kvstore_hash_destory(kvs_hash_t *hash);
+int kvstore_hash_set(char *key, char *value);
+char * kvstore_hash_get(char *key);
+int kvstore_hash_modify(char *key, char *value);
+int kvstore_hash_delete(char *key);
+int kvstore_hash_count(void);
+
+#endif
+
+#if ENABLE_SKIPLIST_KVENGINE
+
+typedef struct Node{
+    char *key;
+    char *value;
+    struct Node ** forward;
+}Node;
+
+typedef struct SkipList{
+    int level;
+    int count;
+    Node *hander;
+}SkipList;
+
+typedef struct SkipList skiptable_t;
+
+extern skiptable_t Skiptable;
+
+int kvstore_skiplist_create(skiptable_t *table);
+void kvstore_skiplist_destory(skiptable_t *table);
+int kvstore_skiplist_set(char *key, char *value);
+char * kvstore_skiplist_get(char *key);
+int kvstore_skiplist_modify(char *key, char *value);
+int kvstore_skiplist_delete(char *key);
+int kvstore_skiplist_count(void);
+
 
 #endif
 

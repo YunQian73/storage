@@ -1,9 +1,3 @@
-/*
-reactor作用：对于应用层提供，只需要关注读的数据在哪里rbuffer，以及读的数据的长度
-第二就是wbuffer，要发送的数据在哪里
-如何测试性能，你的webserver性能怎么样？工具 - wrk
-
-*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,60 +61,6 @@ int epfd = 0;
 struct conn_item connlist[1048576] = {0}; // 2 * 512 * 1024 * 1024
 struct timeval tv_start;
 
-#if ENABLE_HTTP_RESPONSE
-
-#define ROOT_DIR "/home/lee/0voice2310/2.1.1-multi-io/"
-
-    typedef struct conn_item connection_t;
-
-    // http://192.168.137.128:2024/index.html
-    // GET index.html HTTP/1.1
-
-    // http://192.168.137.128:2024/abc.html
-    // GET abc.html HTTP/1.1
-    int http_request(connection_t *conn){ // 如何通过请求的信息拿到想要的文件
-        // conn -> buffer
-        // conn -> wlen
-
-        return 0;
-    }
-
-    // 
-    int http_response(connection_t *conn){
-    #if 1
-        conn->wlen = sprintf(conn->wbuffer,
-            "HTTP/1.1 200 OK\r\n"
-            "Accept-Ranges: bytes\r\n"
-            "Content-Length: 82\r\n"
-            "Content-Type: text/html\r\n"
-            "Date: Sat, 01 Sep 2020 13:14:21 GMT\r\n\r\n"
-            "<html><head><title>0voice.king</title></head><body><h1>king</h1></body></html>\r\n\r\n");
-    #else
-        int filefd = open(ROOT_DIR "index.html", O_RDONLY);
-
-        struct stat stat_buf;
-        fstat(filefd, &stat_buf);
-
-        conn->wlen = sprintf(conn->wbuffer,
-            "HTTP/1.1 200 OK\r\n"
-            "Accept-Ranges: bytes\r\n"
-            "Content-Length: %ld\r\n"
-            "Content-Type: text/html\r\n"
-            "Date: Sat, 01 Sep 2020 13:14:21 GMT\r\n\r\n", stat_buf.st_size);
-
-        int count = read(filefd, conn->wbuffer + conn->wlen, BUFFER_LENGTH - conn->wlen);
-        conn->wlen += count;
-
-        // sendfile
-    #endif
-        return conn->wlen;
-    }
-#endif
-
-// struct reactor{
-//     int epfd;
-//     struct conn_item *connlist;
-// };
 
 #define TIME_SUB_MS(tv1, tv2) ((tv1.tv_sec - tv2.tv_sec) * 1000 + (tv1.tv_usec - tv2.tv_usec) / 1000) // 单位：ms
 
@@ -276,47 +216,23 @@ int epoll_entry(msg_handler handler){
 
     // pthread_create();
 
-    /*
-    struct epoll_event
-    {
-        uint32_t events;	// Epoll events,对应的事件，传进去的事件
-        epoll_data_t data;	// User data variable，可用参数
-    } __EPOLL_PACKED;
-    */
-
     struct epoll_event events[1024] = {0};
     while(1){ // mainloop
         int nready = epoll_wait(epfd, events, 1024, -1);
 
         for(int i = 0; i < nready; i++){
             int connfd = events[i].data.fd;
-            /*
-            if(sockfd == connfd){
-                // accept_cb()
-                // int clientfd = accept_cb(connfd);
 
-                int clientfd = connlist[sockfd].accept_callback(sockfd);
-                printf("clientfd:%d\n", clientfd);
-            } 
-            else  */
             if(events[i].events & EPOLLIN){
-                // recv_cb()
-                // int count = recv_cb(connfd);
 
                 int count = connlist[connfd].recv_t.recv_callback(connfd);
-                // printf("recv <-- buffer: %s\n", connlist[connfd].rbuffer);
+
             }
             else if(events[i].events & EPOLLOUT){ 
-                //int count = send_cb(connfd);
-                // printf("send --> buffer: %s\n", connlist[connfd].wbuffer);
+
                 int count = connlist[connfd].send_callback(connfd);
+
             }
         }
     }
-
-    // close(clientfd);
-
-
-    // 防止代码直接退出
-    getchar();
 }
