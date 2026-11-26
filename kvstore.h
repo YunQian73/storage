@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -76,7 +77,6 @@ enum{
 };
 
 // kvstore_persist.c的函数
-
 typedef struct KvRecoverResult{
     int cmd_count;      // 命令的个数
     char **cmds;        // 存放具体的命令
@@ -132,6 +132,16 @@ void kvstore_free(void *ptr);
 #define ENABLE_NETWORK_SELECT NETWORK_EPOLL
 
 #define ENABLE_MEM_POOL 0
+#define ENABLE_PERSIST 1
+
+#if ENABLE_PERSIST
+
+int kvstore_persist_init(const char *file_name);
+int kvstore_persist_append(const char *buf, size_t len);
+int kvstore_persist_sync(void);
+void kvstore_persist_destory(void);
+
+#endif
 
 
 #if ENABLE_MEM_POOL

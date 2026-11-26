@@ -58,7 +58,7 @@ int send_cb(int fd);
 int epfd = 0;
 // 当分配的数组大于2G的时候会出现错误
 // relocation truncated to fit: R_X86_64_PC32 against symbol `tv_start' defined in .bss section in /tmp/ccdqYpgF.o
-struct conn_item connlist[1048576] = {0}; // 2 * 512 * 1024 * 1024
+struct conn_item connlist[1024] = {0}; // 2 * 512 * 1024 * 1024
 struct timeval tv_start;
 
 

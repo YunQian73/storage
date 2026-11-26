@@ -1,5 +1,81 @@
 #include "kvstore.h"
 
+// 文件描述符
+static int persist_fd = -1;
+
+int kvstore_persist_init(const char *file_name){
+    if(file_name == NULL){
+        fprintf(stderr, "file_name is NULL!\n");
+        return -1;
+    }
+
+
+    persist_fd = open(file_name, O_RDONLY | O_CREAT | O_APPEND, 0644);
+    if(persist_fd < 0){
+        perror("open file failed\n");
+        return -1;
+    }
+
+    return persist_fd;
+}
+
+// 将buf中长度为len字节的数据写入persist_fd对应的文件中
+int kvstore_persist_append(const char *buf, size_t len){
+    if(buf == NULL || len == 0){
+        fprintf(stderr, "buf or len can not be null\n");
+        return -1;
+    }
+
+    size_t write_len = write(persist_fd, buf, len);
+    while(write_len < len){
+        ssize_t n = write(persist_fd, buf + write_len, len - write_len);
+        if(n < 0){
+            // 系统调用被信号中断
+            if(errno == EINTR){
+                continue;
+            }
+
+            perror("write file failed\n");
+
+            return -1;
+        }
+        write_len += n;
+    }
+    return 0;
+}
+
+/*
+数据同步函数，保证数据能够安全的存储到磁盘中
+*/
+int kvstore_persist_sync(void){
+    if(persist_fd < 0){
+        fprintf(stderr, "open file failed\n");
+        return -1;
+    }
+
+    int n = fsync(persist_fd);
+    if(n < 0){
+        perror("fsync");
+        return -1;
+    }
+
+    return 0;
+}
+
+void kvstore_persist_destory(void){
+    if(persist_fd < 0){
+        fprintf(stderr, "fd < 0\n");
+        return;
+    }
+
+    close(persist_fd);
+
+    persist_fd = -1;
+    return;
+}
+
+
+#if 0
 void kvstore_aof_append(const char *file_name, const char *content){
     if(file_name == NULL){
         fprintf(stderr, "warning：文件名为空\n");
@@ -487,3 +563,4 @@ int modify_log_cmd(const char *log_file, const char *cmd_prefix, char *key, char
     printf("mod_log_set_cmd: 成功修改日志中 [%s %s] 的value为 %s\n", cmd_prefix, key, value);
     return 0;
 }
+#endif

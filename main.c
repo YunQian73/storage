@@ -4,12 +4,7 @@ int main(){
 
     init_kvengine();
 
-#if ENABLE_KVSTORE_LOG
-    int ret = kvstore_execute_recovered_cmds("kvstore_rdb_log.txt");
-    if(ret == 0){
-        printf("cmd recovery success\n");
-    }
-
+#if ENABLE_PERSIST
     
 #endif
 

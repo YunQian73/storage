@@ -69,17 +69,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             int res = kvstore_array_set(key, value);
             if(!res){
                 length = sprintf(response, "SUCCESS\r\n");
-#if ENABLE_KVSTORE_LOG
-                log_file_fd = open("kvstore_rdb_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
-                if(log_file_fd != -1){
-                    snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
-                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
-                    close(log_file_fd);
-                }
-                else{
-                    perror("open file failed (SET)");
-                }
-#endif
             }
             else{
                 length = sprintf(response, "FATLED\r\n");
@@ -103,19 +92,13 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("del\n");
             int res = kvstore_array_delete(key);
             if(res < 0){ // server
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = delete_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1]);
-                if(ret_log != 0){
-                    fprintf(stderr, "清理key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }
             break;
         }
@@ -123,26 +106,20 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("mod\n");
             int res = kvstore_array_modify(key, value);  
             if(res < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = modify_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1], tokens[2]);
-                if(ret_log != 0){
-                    fprintf(stderr, "修改key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }          
             break;
         }
         case KVS_CMD_ACOUNT:{
             int count = kvstore_array_count();  
             if(count < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else{
                 length = sprintf(response, "%d", count);               
@@ -153,21 +130,10 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // printf("rset:%s\n", key);
             int res = kvstore_rbtree_set(key, value);
             if(!res){
-                length = sprintf(response, "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                log_file_fd = open("kvstore_rdb_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
-                if(log_file_fd != -1){
-                    length = snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
-                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
-                    close(log_file_fd);
-                }
-                else{
-                    perror("open file failed (RSET)");
-                }
-#endif
+                length = sprintf(response, "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "FATLED");
+                length = sprintf(response, "FATLED\r\n");
             }
             break;
         }
@@ -177,7 +143,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", val);
             }
             else{
-                length = sprintf(response, "NO EXIST");
+                length = sprintf(response, "NO EXIST\r\n");
             }
             printf("rget: %s\n", val);
             break;
@@ -186,19 +152,13 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // printf("rdel:%s\n", key);
             int res = kvstore_rbtree_delete(key);
             if(res < 0){ // server
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = delete_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1]);
-                if(ret_log != 0){
-                    fprintf(stderr, "清理key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }
             break;
         }
@@ -206,20 +166,20 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // printf("rmod:%s\n", key);
             int res = kvstore_rbtree_modify(key, value);  
             if(res < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");               
+                length = sprintf(response, "%s", "SUCCESS\r\n");               
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             } 
             break;
         }  
         case KVS_CMD_RCOUNT:{
             int count = kvstore_rbtree_count();  
             if(count < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else{
                 length = sprintf(response, "%d", count);               
@@ -231,17 +191,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             int res = kvstore_hash_set(key, value);
             if(!res){
                 length = sprintf(response, "SUCCESS\r\n");
-#if ENABLE_KVSTORE_LOG
-                log_file_fd = open("kvstore_rdb_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
-                if(log_file_fd != -1){
-                    snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
-                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
-                    close(log_file_fd);
-                }
-                else{
-                    perror("open file failed (SET)");
-                }
-#endif
             }
             else{
                 length = sprintf(response, "FATLED\r\n");
@@ -265,19 +214,13 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("del\n");
             int res = kvstore_hash_delete(key);
             if(res < 0){ // server
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = delete_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1]);
-                if(ret_log != 0){
-                    fprintf(stderr, "清理key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }
             break;
         }
@@ -285,26 +228,20 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("mod\n");
             int res = kvstore_hash_modify(key, value);  
             if(res < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = modify_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1], tokens[2]);
-                if(ret_log != 0){
-                    fprintf(stderr, "修改key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }          
             break;
         }
         case KVS_CMD_HCOUNT:{
             int count = kvstore_hash_count();  
             if(count < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else{
                 length = sprintf(response, "%d", count);               
@@ -316,17 +253,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             int res = kvstore_skiplist_set(key, value);
             if(!res){
                 length = sprintf(response, "SUCCESS\r\n");
-#if ENABLE_KVSTORE_LOG
-                log_file_fd = open("kvstore_rdb_log.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
-                if(log_file_fd != -1){
-                    snprintf(cmd_buf, sizeof(cmd_buf), "%s %s %s\r\n", tokens[0], tokens[1], tokens[2]);
-                    write(log_file_fd, cmd_buf, strlen(cmd_buf));
-                    close(log_file_fd);
-                }
-                else{
-                    perror("open file failed (SET)");
-                }
-#endif
             }
             else{
                 length = sprintf(response, "FATLED\r\n");
@@ -350,19 +276,13 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("del\n");
             int res = kvstore_skiplist_delete(key);
             if(res < 0){ // server
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = delete_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1]);
-                if(ret_log != 0){
-                    fprintf(stderr, "清理key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }
             break;
         }
@@ -370,26 +290,20 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             // LOG("mod\n");
             int res = kvstore_skiplist_modify(key, value);  
             if(res < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
-                length = sprintf(response, "%s", "SUCCESS");
-#if ENABLE_KVSTORE_LOG
-                int ret_log = modify_log_cmd("kvstore_rdb_log.txt", "SET", tokens[1], tokens[2]);
-                if(ret_log != 0){
-                    fprintf(stderr, "修改key = %s的日志失败\n", tokens[1]);
-                }
-#endif
+                length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
-                length = sprintf(response, "NO EXITS");
+                length = sprintf(response, "NO EXITS\r\n");
             }          
             break;
         }
         case KVS_CMD_SCOUNT:{
             int count = kvstore_skiplist_count();  
             if(count < 0){
-                length = sprintf(response, "%s", "ERROR");
+                length = sprintf(response, "%s", "ERROR\r\n");
             }
             else{
                 length = sprintf(response, "%d", count);               
@@ -422,7 +336,7 @@ int kvstore_request(char *msg, int count, char *response){
     // for(idx = 0; idx < count; idx++){
     //     printf("idx: %s\n", tokens[idx]);
     // }
-    kvstore_aof_append("kvstore_aof_log.txt", msg);
+    // kvstore_aof_append("kvstore_aof_log.txt", msg);
     return kvstore_parser_protocol(tokens, count, response);
 
     return 0;
