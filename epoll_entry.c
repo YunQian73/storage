@@ -118,37 +118,45 @@ int accept_cb(int fd){
 }
 
 // 作用：接收数据；将接收的buffer放到合适的位置
-int recv_cb(int fd){ // fd --> EPOLLIN
-    char *buffer = connlist[fd].rbuffer;
-    int idx = connlist[fd].rlen;
+int recv_cb(int fd){
+    struct conn_item *item = &connlist[fd];
 
-    int count = recv(fd, buffer, BUFFER_LENGTH, 0);
+    // 清理上一次接收的数据
+    memset(item->rbuffer, 0, BUFFER_LENGTH);
+    item->rlen = 0;
+
+    // 预留一个字节存放 '\0'
+    int count = recv(fd, item->rbuffer,
+                     BUFFER_LENGTH - 1, 0);
+
     if(count == 0){
         printf("disconnect\n");
         epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
         close(fd);
         return -1;
     }
-    connlist[fd].rlen += count;
 
-#if 0 // 要发送的数据
-    memcpy(connlist[fd].wbuffer, connlist[fd].rbuffer, connlist[fd].rlen);
+    if(count < 0){
+        perror("recv");
+        epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+        close(fd);
+        return -1;
+    }
 
-    connlist[fd].wlen = connlist[fd].rlen;
-    connlist[fd].rlen -= connlist[fd].rlen;
-#else
-    // http_request(&connlist[fd]);
-    // http_response(&connlist[fd]);
-    // kvstore_request(&connlist[fd]);
-    // connlist[fd].wlen = strlen(connlist[fd].wbuffer);
+    // 手动添加字符串结束符
+    item->rbuffer[count] = '\0';
 
-    kvs_request(&connlist[fd]);
-    
-#endif
+    // 记录本次接收的数据长度
+    item->rlen = count;
 
-    // send(fd, buffer, idx, 0); 直接send，和设置事件优缺点是什么？
+    // 执行 KVSTORE 指令
+    kvs_request(item);
 
-    // 设置事件
+    if(item->wlen < 0){
+        item->wlen = sprintf(item->wbuffer, "ERROR\r\n");
+    }
+
+    // 切换到发送事件
     set_event(fd, EPOLLOUT, 0);
 
     return count;

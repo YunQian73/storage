@@ -10,13 +10,13 @@ int kvstore_persist_init(const char *file_name){
     }
 
 
-    persist_fd = open(file_name, O_RDONLY | O_CREAT | O_APPEND, 0644);
+    persist_fd = open(file_name, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if(persist_fd < 0){
         perror("open file failed\n");
         return -1;
     }
 
-    return persist_fd;
+    return 0;
 }
 
 // 将buf中长度为len字节的数据写入persist_fd对应的文件中
@@ -26,7 +26,7 @@ int kvstore_persist_append(const char *buf, size_t len){
         return -1;
     }
 
-    size_t write_len = write(persist_fd, buf, len);
+    ssize_t write_len = 0;
     while(write_len < len){
         ssize_t n = write(persist_fd, buf + write_len, len - write_len);
         if(n < 0){
@@ -37,6 +37,10 @@ int kvstore_persist_append(const char *buf, size_t len){
 
             perror("write file failed\n");
 
+            return -1;
+        }
+        else if(n == 0){
+            fprintf(stderr, "写入数据长度为0，导致死循环\n");
             return -1;
         }
         write_len += n;
@@ -62,7 +66,7 @@ int kvstore_persist_sync(void){
     return 0;
 }
 
-void kvstore_persist_destory(void){
+void kvstore_persist_destroy(void){
     if(persist_fd < 0){
         fprintf(stderr, "fd < 0\n");
         return;

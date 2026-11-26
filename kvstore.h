@@ -105,6 +105,25 @@ void kvstore_aof_append(const char *filename, const char *content);
 #define KVSTORE_BUF_SIZE 256    // 相应缓冲区大小
 
 // kvstore.c的函数
+/**
+ * @brief aof过滤出写命令,如SET、MOD、DEL...
+ * 
+ * @param cmd 该命令的枚举值
+ * @return 1--写命令，需要持久化  0--读命令，不需要持久化
+ */
+int kvstore_is_write_cmd(int cmd);
+
+/**
+ * @brief aof命令序列化
+ * 
+ * @param tokens 解析完成的命令参数
+ * @param count 参数数量
+ * @param buf 存放序列化结果的缓冲区
+ * @param capacity 缓冲区容量
+ * @return int 大于0--实际序列化得到的长度  小于0--序列化失败
+ */
+int kvstore_serialize_cmd(char **tokens, int count, char *buf, size_t capacity);
+
 int kvstore_split_token(char* msg, char** tokens);
 int kvstore_parser_protocol(char **tokens, int count, char *response);
 int kvstore_request(char *msg, int count, char *response);
@@ -139,7 +158,7 @@ void kvstore_free(void *ptr);
 int kvstore_persist_init(const char *file_name);
 int kvstore_persist_append(const char *buf, size_t len);
 int kvstore_persist_sync(void);
-void kvstore_persist_destory(void);
+void kvstore_persist_destroy(void);
 
 #endif
 

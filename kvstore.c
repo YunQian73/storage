@@ -8,7 +8,11 @@ const char* commands[] = {
     "SSET", "SGET", "SDEL", "SMOD", "SCOUNT"
 };
 
+#if ENABLE_PERSIST
 
+static int persist_error = 0;
+
+#endif
 
 
 
@@ -29,6 +33,62 @@ void kvstore_free(void *ptr){
 #endif
 }
 
+// 1 写命令  0 读命令
+int kvstore_is_write_cmd(int cmd){
+    switch(cmd){
+        case KVS_CMD_SET:
+        case KVS_CMD_MOD:
+        case KVS_CMD_DEL:
+
+        case KVS_CMD_RSET:
+        case KVS_CMD_RMOD:
+        case KVS_CMD_RDEL:
+
+        case KVS_CMD_HSET:
+        case KVS_CMD_HMOD:
+        case KVS_CMD_HDEL:
+
+        case KVS_CMD_SSET:
+        case KVS_CMD_SMOD:
+        case KVS_CMD_SDEL:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+
+int kvstore_serialize_cmd(char **tokens, int count, char *buf, size_t capacity){
+    if(tokens == NULL || count < 0 || buf == NULL || capacity == 0){
+        fprintf(stderr, "parameters cannot be empty");
+        return -1;
+    }
+
+    size_t offset = 0;
+    for(int i = 0; i < count; i++){
+        if(tokens[i] == NULL){
+            fprintf(stderr, "token[%d] is NULL\n", i);
+            return -1;
+        }
+        // 在tokens间加上分隔符
+        int n = snprintf(buf + offset, capacity - offset, "%s%s", i == 0 ? "" : " ", tokens[i]);
+        if(n < 0 || (size_t)n >= capacity - offset){
+            fprintf(stderr, "缓冲区大小不足或写入数据失败\n");
+            return -1;
+        }
+        offset += (size_t)n;
+    }
+
+    // 这里的n为"\r\n"的长度，恒为2
+    int n = snprintf(buf + offset, capacity - offset, "\r\n");
+    if(n < 0 || (size_t)n >= capacity - offset){
+        fprintf(stderr, "缓冲区大小不足或写入数据失败\n");
+        return -1;
+    }
+    offset += (size_t)n;
+
+    return (int)offset;
+}
 
 int kvstore_split_token(char* msg, char** tokens){
     // 初始化后tokens[i]为空，但是tokens不应为空
@@ -39,6 +99,9 @@ int kvstore_split_token(char* msg, char** tokens){
     char* token = strtok(msg, " \r\n");
 
     while(token != NULL){
+        if(idx >= KVSTORE_MAX_TOKENS){
+            return -1;
+        }
         tokens[idx++] = token;
         token = strtok(NULL, " \r\n");
     }
@@ -58,43 +121,49 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
 
     // 存放返回的文件描述符
     int log_file_fd = -1;
-    char cmd_buf[1024] = {0};
+
+    int write_success = 0;
+
     int length = 0;
     char* key = tokens[1];
     char* value = tokens[2];
 
     switch(cmd){
         case KVS_CMD_SET:{
-            // LOG("set\n");
             int res = kvstore_array_set(key, value);
-            if(!res){
+
+            if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "SUCCESS\r\n");
             }
-            else{
+            else if(res < 0){
                 length = sprintf(response, "FATLED\r\n");
             }
-            printf("set: %d\n", res);
+            else{
+                length = sprintf(response, "EXIST\r\n");
+            }
+
             break;
         }
         case KVS_CMD_GET:{
-            // LOG("get\n");
             char *val = kvstore_array_get(key);
+
             if(val){
                 length = sprintf(response, "%s\r\n", val);
             }
             else{
                 length = sprintf(response, "NO EXIST\r\n");
             }
-            printf("get: %s\n", val);
+
             break;
         }
         case KVS_CMD_DEL:{
-            // LOG("del\n");
             int res = kvstore_array_delete(key);
             if(res < 0){ // server
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -103,12 +172,12 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             break;
         }
         case KVS_CMD_MOD:{
-            // LOG("mod\n");
             int res = kvstore_array_modify(key, value);  
             if(res < 0){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -129,11 +198,15 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         case KVS_CMD_RSET:{
             // printf("rset:%s\n", key);
             int res = kvstore_rbtree_set(key, value);
-            if(!res){
+            if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "SUCCESS\r\n");
             }
-            else{
+            else if(res < 0){
                 length = sprintf(response, "FATLED\r\n");
+            }
+            else{
+                length = sprintf(response, "EXIST\r\n");
             }
             break;
         }
@@ -155,6 +228,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -169,6 +243,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");               
             }
             else{
@@ -189,13 +264,16 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         case KVS_CMD_HSET:{
             // LOG("set\n");
             int res = kvstore_hash_set(key, value);
-            if(!res){
+            if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "SUCCESS\r\n");
             }
-            else{
+            else if(res < 0){
                 length = sprintf(response, "FATLED\r\n");
             }
-            printf("set: %d\n", res);
+            else{
+                length = sprintf(response, "EXIST\r\n");
+            }
             break;
         }
         case KVS_CMD_HGET:{
@@ -207,7 +285,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             else{
                 length = sprintf(response, "NO EXIST\r\n");
             }
-            printf("get: %s\n", val);
             break;
         }
         case KVS_CMD_HDEL:{
@@ -217,6 +294,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -231,6 +309,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -251,13 +330,16 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         case KVS_CMD_SSET:{
             // LOG("set\n");
             int res = kvstore_skiplist_set(key, value);
-            if(!res){
+            if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "SUCCESS\r\n");
             }
-            else{
+            else if(res < 0){
                 length = sprintf(response, "FATLED\r\n");
             }
-            printf("set: %d\n", res);
+            else{
+                length = sprintf(response, "EXIST\r\n");
+            }
             break;
         }
         case KVS_CMD_SGET:{
@@ -269,7 +351,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             else{
                 length = sprintf(response, "NO EXIST\r\n");
             }
-            printf("get: %s\n", val);
             break;
         }
         case KVS_CMD_SDEL:{
@@ -279,6 +360,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -293,6 +375,7 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
                 length = sprintf(response, "%s", "ERROR\r\n");
             }
             else if(res == 0){
+                write_success = 1;
                 length = sprintf(response, "%s", "SUCCESS\r\n");
             }
             else{
@@ -316,19 +399,41 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         }
             
     }
+#if ENABLE_PERSIST
+
+    char cmd_buf[1024] = {0};
+
+    if (persist_error && kvstore_is_write_cmd(cmd)) {
+
+        length = sprintf(response, "AOF ERROR: WRITES DISABLED\r\n");
+    }
+
+    if(kvstore_is_write_cmd(cmd) && write_success){
+        int n = kvstore_serialize_cmd(tokens, count, cmd_buf, sizeof(cmd_buf));
+        if(n == -1){
+            fprintf(stderr, "failed to write data\n");
+        }
+
+        int m = kvstore_persist_append(cmd_buf, n);
+        if(m == -1){
+            persist_error = 1;
+            length = sprintf(response, "AOF WRITE ERROR\r\n");
+        }
+    }
+#endif
     return length;
 }
 
-int kvstore_request(char *msg, int count, char *response){
+int kvstore_request(char *msg, int length, char *response){
     // printf("recv:%s\n", item->rbuffer);
-    if(msg == NULL || count < 0 || response == NULL){
+    if(msg == NULL || length < 0 || response == NULL){
         return -1;
     }
 
     char *tokens[KVSTORE_MAX_TOKENS] = {};
 
-    count = kvstore_split_token(msg, tokens);
-    if(count == -1){
+    int token_count = kvstore_split_token(msg, tokens);
+    if(token_count == -1){
         return -1;
     }
 
@@ -337,7 +442,7 @@ int kvstore_request(char *msg, int count, char *response){
     //     printf("idx: %s\n", tokens[idx]);
     // }
     // kvstore_aof_append("kvstore_aof_log.txt", msg);
-    return kvstore_parser_protocol(tokens, count, response);
+    return kvstore_parser_protocol(tokens, token_count, response);
 
     return 0;
 }

@@ -18,46 +18,65 @@ int kvstore_array_create(array_t *arr){
 
 // destory - 释放空间自行
 int kvstore_array_destory(array_t *arr){
-    if(!arr) return -1;
+    if(arr == NULL) return -1;
 
-    if(!arr->array_table) kvstore_free(arr->array_table);
+    if(arr->array_table != NULL){
+        for(int i = 0; i < arr->array_idx; i++){
+            kvstore_free(arr->array_table[i].key);
+            kvstore_free(arr->array_table[i].value);
+        }
+
+        kvstore_free(arr->array_table);
+    }
+
+    arr->array_table = NULL;
+    arr->array_idx = 0;
 
     return 0;
 }
 
 
 int _array_set(array_t *arr, char *key, char *value){
-    if(arr == NULL || key == NULL || value == NULL || arr->array_idx == KVS_ARRAY_SIZE) return -1;
 
-    char *kcopy = kvstore_malloc(strlen(key) + 1); // 不要直接用malloc不利于拓展
-    if(kcopy == NULL) return -1;
-    strncpy(kcopy, key, strlen(key) + 1);
-
-    char *vcopy = kvstore_malloc(strlen(value) + 1); // 不要直接用malloc不利于拓展
-    if(kcopy == NULL) {
-        kvstore_free(kcopy);
+    if(arr == NULL || arr->array_table == NULL ||
+       key == NULL || value == NULL){
         return -1;
     }
-    strncpy(vcopy, value, strlen(value) + 1);
 
-    int i = 0;
-    // 这里不能判断等于的情况，当array_table满的
-    // 时候(array_table[0] ~ array_table[1023])，
-    // 但这时array_idx = 1024，直接array_table[1024]会溢出
-    for(i = 0; i < arr->array_idx; i++){
-        if(arr->array_table[i].key == NULL){
-            arr->array_table[i].key = kcopy;
-            arr->array_table[i].value = vcopy;
-            arr->array_idx++;
-            return 0;
+    // 1. 判断 key 是否已经存在
+    for(int i = 0; i < arr->array_idx; i++){
+        if(strcmp(arr->array_table[i].key, key) == 0){
+            return 1;
         }
     }
 
-    if(i < KVS_ARRAY_SIZE && i == arr->array_idx){
-        arr->array_table[arr->array_idx].key = kcopy;
-        arr->array_table[arr->array_idx].value = vcopy;
-        arr->array_idx++;
+    // 2. 判断数组是否已满
+    if(arr->array_idx >= KVS_ARRAY_SIZE){
+        return -1;
     }
+
+    // 3. 分配 key 的内存
+    char *kcopy = kvstore_malloc(strlen(key) + 1);
+
+    if(kcopy == NULL) return -1;
+
+    strcpy(kcopy, key);
+
+    // 4. 分配 value 的内存
+    char *vcopy = kvstore_malloc(strlen(value) + 1);
+
+    if(vcopy == NULL){
+        kvstore_free(kcopy);
+        return -1;
+    }
+
+    strcpy(vcopy, value);
+
+    // 5. 插入到数组末尾
+    arr->array_table[arr->array_idx].key = kcopy;
+    arr->array_table[arr->array_idx].value = vcopy;
+
+    arr->array_idx++;
 
     return 0;
 }
@@ -129,21 +148,21 @@ int _array_count(array_t *arr){
 
 
 int kvstore_array_set(char *key, char *value){
-    _array_set(&Array, key, value);
+    return _array_set(&Array, key, value);
 }
 
 char* kvstore_array_get(char *key){
-    _array_get(&Array, key);
+    return _array_get(&Array, key);
 }
 
 int kvstore_array_delete(char *key){
-    _array_delete(&Array, key);
+    return _array_delete(&Array, key);
 }
 
 int kvstore_array_modify(char *key, char *value){
-    _array_modify(&Array, key, value);
+    return _array_modify(&Array, key, value);
 }
 
 int kvstore_array_count(void){
-    _array_count(&Array);
+    return _array_count(&Array);
 }

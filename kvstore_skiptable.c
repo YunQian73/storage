@@ -308,7 +308,7 @@ int _skiplist_count(skiptable_t *table){
 }
 
 int kvstore_skiplist_set(char *key, char *value){
-    _skiplist_set(&Skiptable, key, value);
+    return _skiplist_set(&Skiptable, key, value);
 }
 
 char * kvstore_skiplist_get(char *key){
@@ -316,7 +316,7 @@ char * kvstore_skiplist_get(char *key){
 }
 
 int kvstore_skiplist_modify(char *key, char *value){
-    _skiplist_modify(&Skiptable, key, value);
+    return _skiplist_modify(&Skiptable, key, value);
 }
 
 int kvstore_skiplist_delete(char *key){
