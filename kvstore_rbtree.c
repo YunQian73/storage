@@ -423,20 +423,21 @@ int kvstore_rbtree_destory(rbtree* tree){
 
         node = rbtree_delete(tree, node);
 
-        if(!node)
+        if(node)
         {
             kvstore_free(node->key);
             kvstore_free(node->value);
             kvstore_free(node);
         }
     }
+    return 0;
 }
 
 
 int _rbtree_set(rbtree *tree, char *key, char *value){
     if(tree == NULL || key == NULL || value == NULL) return -1;
 
-    if(rbtree_search(tree, key) == tree->nil) return 1;
+    if(rbtree_search(tree, key) != tree->nil) return 1;
 
     rbtree_node* node = (rbtree_node*)kvstore_malloc(sizeof(rbtree_node));
     if(node == NULL) return -1;
@@ -477,6 +478,8 @@ char* _rbtree_get(rbtree* tree, char *key){
 }
 
 int _rbtree_delete(rbtree* tree, char *key){
+    if(tree == NULL || key == NULL) return -1;
+
     rbtree_node* node = rbtree_search(tree, key);
     if(node == tree->nil){
         return -1;
@@ -494,18 +497,19 @@ int _rbtree_delete(rbtree* tree, char *key){
 }
 
 int _rbtree_modify(rbtree* tree, char *key, char *value){
+    if(tree == NULL || key == NULL) return -1;
+
     rbtree_node* node = rbtree_search(tree, key);
     if(node == tree->nil){
         return -1;
     }
 
-    char* tmp = node->value;
-    kvstore_free(tmp);
+    char *newv = kvstore_malloc(strlen(value) + 1);
+    if(!newv) return -1;
+    strcpy(newv, value);
+    kvstore_free(node->value);
+    node->value = newv;
 
-    node->value = kvstore_malloc(strlen(value) + 1);
-    if(node->value == NULL){
-        return -1;
-    }
     strcpy(node->value, value);
 
     return 0;

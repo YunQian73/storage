@@ -57,7 +57,7 @@ int kvstore_is_write_cmd(int cmd){
     }
 }
 
-
+// aof序列化命令，将分割的tokens重新拼成完整cmd并加上\r\n，放到buf中
 int kvstore_serialize_cmd(char **tokens, int count, char *buf, size_t capacity){
     if(tokens == NULL || count < 0 || buf == NULL || capacity == 0){
         fprintf(stderr, "parameters cannot be empty");
@@ -108,7 +108,7 @@ int kvstore_split_token(char* msg, char** tokens){
     return idx;
 }
 
-int kvstore_parser_protocol(char **tokens, int count, char *response){
+int kvstore_execute_command(char **tokens, int count, char *response, kvs_cmd_source_t source, int *write_ok){
     if(tokens[0] == NULL || response == NULL || count == 0) return -1;
 
     int cmd = KVS_CMD_START;
@@ -119,6 +119,17 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         }
     }
 
+#if ENABLE_PERSIST
+
+    if (persist_error && kvstore_is_write_cmd(cmd)) {
+        return sprintf(response, "AOF ERROR: WRITES DISABLED\r\n");
+    }
+
+#endif
+
+    if(write_ok != NULL){
+        *write_ok = 0;
+    }
     // 存放返回的文件描述符
     int log_file_fd = -1;
 
@@ -394,7 +405,6 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
             break;
         }    
         default:{
-            LOG("cmd: %s\n", commands[cmd]);
             assert(0);
         }
             
@@ -403,15 +413,10 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
 
     char cmd_buf[1024] = {0};
 
-    if (persist_error && kvstore_is_write_cmd(cmd)) {
-
-        length = sprintf(response, "AOF ERROR: WRITES DISABLED\r\n");
-    }
-
-    if(kvstore_is_write_cmd(cmd) && write_success){
+    if(source == KVS_CMD_FROM_CLIENT && kvstore_is_write_cmd(cmd) && write_success){
         int n = kvstore_serialize_cmd(tokens, count, cmd_buf, sizeof(cmd_buf));
-        if(n == -1){
-            fprintf(stderr, "failed to write data\n");
+        if(n < 0){
+            return sprintf(response, "SERIALIZE ERROR\r\n");
         }
 
         int m = kvstore_persist_append(cmd_buf, n);
@@ -421,7 +426,16 @@ int kvstore_parser_protocol(char **tokens, int count, char *response){
         }
     }
 #endif
+
+    if (write_ok != NULL) {
+        *write_ok = write_success;
+    }
+
     return length;
+}
+
+int kvstore_parser_protocol(char **tokens, int count, char *response){
+    return kvstore_execute_command(tokens, count, response, KVS_CMD_FROM_CLIENT, NULL);
 }
 
 int kvstore_request(char *msg, int length, char *response){

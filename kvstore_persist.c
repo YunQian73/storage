@@ -78,6 +78,61 @@ void kvstore_persist_destroy(void){
     return;
 }
 
+// 使用getline逐行读取
+int kvstore_persist_recover(const char *filename){
+    FILE *fp = fopen(filename, "r");
+    if(fp == NULL){
+        // 如果文件不存在
+        if(errno == ENOENT) return 0;
+        
+        // 其他文件错误，读取失败...
+        perror("fopen");
+        return -1;
+    }
+
+    char *line = NULL;
+    size_t capacity = 0;
+    ssize_t read_len;
+    size_t line_num = 0;
+    int result = 0;  // 返回值，保证fp正常关闭
+
+    while((read_len = getline(&line, &capacity, fp)) != -1){
+        line_num++;
+        printf("the content read is %s\n", line);
+
+        // line[read_len - 2] = "\0"; // 去除行末的\r\n
+        char *tokens[KVSTORE_MAX_TOKENS] = {0};
+        char response[BUFFER_LENGTH] = {0};
+
+        int tokens_count = kvstore_split_token(line, tokens);
+        if(tokens_count == -1){
+            fprintf(stderr, "failed to parse command\n");
+            result = -1;
+            break;
+        }
+
+        int write_ok = 0;
+        
+        int ret = kvstore_execute_command(tokens, tokens_count, response, KVS_CMD_FROM_RECOVERY, &write_ok);
+        if(ret < 0 || !write_ok){
+            fprintf(stderr, "failed to restore the current instruction\n");
+            result = -1;
+            break;
+        }
+    }
+
+    // 文件读取异常
+    if(ferror(fp) || !feof(fp)){
+        fprintf(stderr, "file read exception\n");
+        return -1;
+    }
+
+    free(line);
+    fclose(fp);
+
+    return result;
+}
+
 
 #if 0
 void kvstore_aof_append(const char *file_name, const char *content){

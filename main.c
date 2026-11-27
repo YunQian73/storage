@@ -5,7 +5,17 @@ int main(){
     init_kvengine();
 
 #if ENABLE_PERSIST
-    if(kvstore_persist_init("appendonly.aof") != 0){
+    const char *aof_file = "appendonly.aof";
+    // 通过aof恢复数据
+    if(kvstore_persist_recover(aof_file) != 0){
+        fprintf(stderr, "AOF recovery failed\n");
+
+        exit_kvengine();
+
+        return EXIT_FAILURE;
+    }
+
+    if(kvstore_persist_init(aof_file) != 0){
         fprintf(stderr, "AOF init failed\n");
 
         exit_kvengine();
